@@ -6,7 +6,7 @@ from uuid import UUID
 
 class SessionBase(BaseModel):
     title: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    session_metadata: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
 
 
@@ -17,7 +17,7 @@ class SessionCreate(SessionBase):
 class SessionUpdate(BaseModel):
     title: Optional[str] = None
     status: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    session_metadata: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     ended_at: Optional[datetime] = None
 

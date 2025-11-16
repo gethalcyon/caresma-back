@@ -14,7 +14,7 @@ class Session(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=True)
     status = Column(String, default="active")  # active, completed, cancelled
-    metadata = Column(JSONB, nullable=True)
+    session_metadata = Column(JSONB, nullable=True)
     notes = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     ended_at = Column(DateTime(timezone=True), nullable=True)
