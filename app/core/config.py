@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
 
+    # OpenAI
+    OPENAI_API_KEY: str
+
     class Config:
         env_file = ".env"
         case_sensitive = True
