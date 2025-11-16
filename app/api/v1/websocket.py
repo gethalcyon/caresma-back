@@ -10,7 +10,18 @@ router = APIRouter()
 @router.websocket("/ws/session/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """
-    WebSocket endpoint for real-time audio streaming.
+    WebSocket endpoint for real-time audio streaming with OpenAI.
+
+    New Architecture:
+    - Backend: OpenAI Realtime API (ASR + LLM) → sends text responses to frontend
+    - Frontend: @heygen/streaming-avatar SDK → handles avatar video/TTS
+
+    Flow:
+    1. User speaks → audio → backend
+    2. OpenAI ASR → text transcript
+    3. OpenAI LLM → text response
+    4. Backend sends text response → frontend
+    5. Frontend avatar.speak(text) → HeyGen renders avatar video
 
     Args:
         websocket: WebSocket connection
@@ -19,7 +30,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     logger.info(f"WebSocket connection established for session: {session_id}")
 
-    # Get OpenAI service instance
+    # Get OpenAI service
     openai_service = get_openai_service()
 
     # Connect to OpenAI Realtime API
@@ -30,12 +41,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         await websocket.close()
         return
 
-    # Start conversation
+    # Start conversation in text-only mode
+    # OpenAI will handle ASR (audio → text) and LLM (text → text)
+    # Frontend will handle TTS via HeyGen avatar
     conversation_started = await openai_service.start_conversation(
         system_prompt="You are a helpful cognitive health assistant for elderly users. "
                      "Be warm, patient, and encouraging. Ask questions to assess memory, "
                      "language skills, and attention.",
-        voice="alloy"
+        voice="alloy",  # Not used in text-only mode, but kept for fallback
+        text_only=True   # Always use text-only output for avatar integration
     )
 
     if not conversation_started:
@@ -44,7 +58,41 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         await websocket.close()
         return
 
-    logger.info(f"OpenAI conversation started for session: {session_id}")
+    logger.info(f"OpenAI conversation ready for session: {session_id} (text-only mode)")
+
+    # Callback to send OpenAI LLM text responses to frontend
+    async def forward_text_response_to_client(text_response: str):
+        """
+        Forward OpenAI LLM text response to frontend.
+        Frontend will use this with avatar.speak(text)
+        """
+        try:
+            logger.info(f"📝 Sending text response to client: '{text_response[:100]}...'")
+            await websocket.send_json({
+                "type": "text_response",
+                "text": text_response
+            })
+        except Exception as e:
+            logger.error(f"Error forwarding text response to client {session_id}: {e}")
+
+    # Optional: Forward user input transcripts to frontend (for UI display)
+    async def forward_transcript_to_client(transcript: str):
+        """Forward user input transcript to frontend for display."""
+        try:
+            logger.info(f"🎤 User said: '{transcript}'")
+            await websocket.send_json({
+                "type": "transcript",
+                "text": transcript
+            })
+        except Exception as e:
+            logger.error(f"Error forwarding transcript to client {session_id}: {e}")
+
+    # Set up callbacks
+    openai_service.set_text_response_callback(forward_text_response_to_client)
+    openai_service.set_transcript_callback(forward_transcript_to_client)
+
+    # Start listening for OpenAI events
+    openai_service.start_listening()
 
     try:
         while True:
@@ -68,6 +116,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 elif msg_type == "stop_recording":
                     logger.info(f"Session {session_id} stopped recording")
+                    # Commit the audio buffer to trigger OpenAI response
+                    await openai_service.commit_audio_buffer()
                     await websocket.send_json({"type": "recording_stopped"})
 
             # Handle binary messages (audio data)
@@ -75,7 +125,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 audio_data = message["bytes"]
                 logger.debug(f"Received {len(audio_data)} bytes of audio from session {session_id}")
 
-                # Forward audio to OpenAI
+                # Forward audio to OpenAI for ASR + LLM processing
                 success = await openai_service.send_audio(audio_data)
 
                 if not success:

@@ -26,6 +26,10 @@ dependencies = [
     "fastapi-users-db-sqlalchemy==6.0.1",
     "openai==1.54.0",
     "websockets==12.0",
+    "httpx==0.26.0",
+    "livekit==1.0.19",
+    "livekit-api==1.0.7",
+    "Pillow==12.0.0",
 ]
 
 [project.optional-dependencies]

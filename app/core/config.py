@@ -19,14 +19,17 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # CORS
-    CORS_ORIGINS: list = ["http://localhost:3000"]
+    # CORS - Allow all origins in development
+    CORS_ORIGINS: list = ["*"]
 
     # API
     API_V1_PREFIX: str = "/api/v1"
 
     # OpenAI
     OPENAI_API_KEY: str
+
+    # HeyGen
+    HEYGEN_API_KEY: str
 
     class Config:
         env_file = ".env"
