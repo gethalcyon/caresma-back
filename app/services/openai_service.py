@@ -15,9 +15,10 @@ class OpenAIRealtimeService:
 
     def __init__(self):
         """Initialize the OpenAI Realtime service."""
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self.client = None  # Will be initialized when needed
         self.websocket = None
         self.is_connected = False
+        self.api_key = settings.OPENAI_API_KEY
 
     async def connect(self) -> bool:
         """
