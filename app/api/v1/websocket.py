@@ -1,7 +1,10 @@
 import json
+import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.logging import get_logger
 from app.services.openai_service import get_openai_service
+from app.services.Messages import MessageService
+from app.db.session import get_db
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -60,14 +63,35 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     logger.info(f"OpenAI conversation ready for session: {session_id} (text-only mode)")
 
-    # Callback to send OpenAI LLM text responses to frontend
+    # Get database session for saving messages
+    db_gen = get_db()
+    db = await db_gen.__anext__()
+
+    # Convert session_id string to UUID
+    thread_uuid = uuid.UUID(session_id)
+
+    # Callback to send OpenAI LLM text responses to frontend AND save to database
     async def forward_text_response_to_client(text_response: str):
         """
-        Forward OpenAI LLM text response to frontend.
+        Forward OpenAI LLM text response to frontend and save to database.
         Frontend will use this with avatar.speak(text)
         """
         try:
             logger.info(f"📝 Sending text response to client: '{text_response[:100]}...'")
+
+            # Save assistant message to database
+            try:
+                await MessageService.create_message(
+                    db=db,
+                    thread_id=thread_uuid,
+                    role="assistant",
+                    content=text_response
+                )
+                logger.info(f"💾 Saved assistant message to database for session {session_id}")
+            except Exception as db_error:
+                logger.error(f"Failed to save assistant message to database: {db_error}")
+
+            # Send to frontend
             await websocket.send_json({
                 "type": "text_response",
                 "text": text_response
@@ -75,11 +99,25 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         except Exception as e:
             logger.error(f"Error forwarding text response to client {session_id}: {e}")
 
-    # Optional: Forward user input transcripts to frontend (for UI display)
+    # Forward user input transcripts to frontend AND save to database
     async def forward_transcript_to_client(transcript: str):
-        """Forward user input transcript to frontend for display."""
+        """Forward user input transcript to frontend and save to database."""
         try:
             logger.info(f"🎤 User said: '{transcript}'")
+
+            # Save user message to database
+            try:
+                await MessageService.create_message(
+                    db=db,
+                    thread_id=thread_uuid,
+                    role="user",
+                    content=transcript
+                )
+                logger.info(f"💾 Saved user message to database for session {session_id}")
+            except Exception as db_error:
+                logger.error(f"Failed to save user message to database: {db_error}")
+
+            # Send to frontend
             await websocket.send_json({
                 "type": "transcript",
                 "text": transcript
@@ -138,10 +176,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session: {session_id}")
         await openai_service.disconnect()
+        await db.close()
 
     except Exception as e:
         logger.error(f"Error in WebSocket connection for session {session_id}: {e}")
         await openai_service.disconnect()
+        await db.close()
         # Only close if not already disconnected
         try:
             await websocket.close()
