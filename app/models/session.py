@@ -23,3 +23,4 @@ class Session(Base):
 
     # Relationships
     user = relationship("User", backref="sessions")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
