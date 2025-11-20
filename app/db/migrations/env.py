@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.models.user import User  # noqa
 from app.models.session import Session  # noqa
 from app.models.message import Message  # noqa
+from app.models.assessment import Assessment  # noqa
 
 # Get metadata from the User model (all models share the same Base)
 target_metadata = User.__table__.metadata

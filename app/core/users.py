@@ -77,5 +77,8 @@ fastapi_users = FastAPIUsers[User, UUID](
 # Dependency to get current active user
 current_active_user = fastapi_users.current_user(active=True)
 
+# Dependency to get current active user (optional - for public endpoints)
+current_active_user_optional = fastapi_users.current_user(active=True, optional=True)
+
 # Dependency to get current superuser
 current_superuser = fastapi_users.current_user(active=True, superuser=True)
