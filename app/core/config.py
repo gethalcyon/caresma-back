@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # HeyGen
     HEYGEN_API_KEY: str
 
+    # Encryption
+    ENCRYPTION_KEY: str
+
     class Config:
         env_file = ".env"
         case_sensitive = True

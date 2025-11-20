@@ -67,8 +67,30 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     db_gen = get_db()
     db = await db_gen.__anext__()
 
-    # Convert session_id string to UUID
-    thread_uuid = uuid.UUID(session_id)
+    # Convert session_id string to UUID with validation
+    # If invalid or "new", create a new UUID
+    try:
+        if session_id.lower() in ["new", "undefined", "null", ""]:
+            # Auto-generate a new UUID for new sessions
+            thread_uuid = uuid.uuid4()
+            logger.info(f"Auto-generated new session UUID: {thread_uuid}")
+            # Send the new session ID to the frontend
+            await websocket.send_json({
+                "type": "session_created",
+                "session_id": str(thread_uuid)
+            })
+        else:
+            thread_uuid = uuid.UUID(session_id)
+            logger.info(f"Using existing session UUID: {thread_uuid}")
+    except (ValueError, AttributeError) as e:
+        logger.warning(f"Invalid session_id format: {session_id} - {e}. Creating new session.")
+        # Fall back to creating a new UUID
+        thread_uuid = uuid.uuid4()
+        logger.info(f"Auto-generated new session UUID after error: {thread_uuid}")
+        await websocket.send_json({
+            "type": "session_created",
+            "session_id": str(thread_uuid)
+        })
 
     # Callback to send OpenAI LLM text responses to frontend AND save to database
     async def forward_text_response_to_client(text_response: str):
