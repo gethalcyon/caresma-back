@@ -15,7 +15,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """
     WebSocket endpoint for real-time audio streaming with OpenAI.
 
-    New Architecture:
+    Architecture:
     - Backend: OpenAI Realtime API (ASR + LLM) → sends text responses to frontend
     - Frontend: @heygen/streaming-avatar SDK → handles avatar video/TTS
 
@@ -51,7 +51,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         system_prompt="You are a helpful cognitive health assistant for elderly users. "
                      "Be warm, patient, and encouraging. Ask questions to assess memory, "
                      "language skills, and attention.",
-        voice="alloy",  # Not used in text-only mode, but kept for fallback
+        voice="alloy",    # Not used in text-only mode, kept for future use
         text_only=True   # Always use text-only output for avatar integration
     )
 
@@ -159,7 +159,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             # Receive data from client (can be text or binary)
             message = await websocket.receive()
 
-            # Handle text messages (control messages)
+            # Handle text messages (control messages) for future use
             if "text" in message:
                 data = json.loads(message["text"])
                 logger.debug(f"Received text message from session {session_id}: {data}")

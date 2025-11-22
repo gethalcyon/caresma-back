@@ -178,7 +178,7 @@ class OpenAIRealtimeService:
 
     async def _listen_for_audio(self) -> None:
         """
-        Internal method to continuously listen for audio from OpenAI.
+        Internal method to continuously listen for response from openai
         This runs in a background task.
         """
         try:
@@ -213,7 +213,7 @@ class OpenAIRealtimeService:
                         if delta_text:
                             self._current_response_text += delta_text
                             logger.debug(f"Accumulated LLM response: {self._current_response_text}")
-
+                
                     elif event_type == "response.text.done":
                         # LLM text response complete - send to callback
                         logger.info(f"OpenAI text response done: {self._current_response_text}")
@@ -299,7 +299,7 @@ class OpenAIRealtimeService:
                 # HeyGen will handle TTS + lipsync + video generation
                 self.session_config = {
                     "modalities": ["text"],  # Text-only output (no audio from OpenAI)
-                    "instructions": system_prompt or "You are a helpful assistant.",
+                    "instructions": system_prompt or "You are a helpful assistant that responds in text only.",
                     "input_audio_format": "pcm16",  # Still accept audio input for ASR
                     "input_audio_transcription": {
                         "model": "whisper-1"
