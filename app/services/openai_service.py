@@ -120,42 +120,6 @@ class OpenAIRealtimeService:
             logger.error(f"Error sending audio to OpenAI: {e}")
             return False
 
-    async def commit_audio_buffer(self) -> bool:
-        """
-        Commit the audio buffer to trigger OpenAI to process and respond.
-
-        Returns:
-            bool: True if committed successfully
-        """
-        try:
-            if not self.is_connected or not self.websocket:
-                logger.warning("Not connected to OpenAI Realtime API")
-                return False
-
-            # Send input_audio_buffer.commit event
-            event = {
-                "type": "input_audio_buffer.commit"
-            }
-
-            await self.websocket.send(json.dumps(event))
-            logger.info("Committed audio buffer to OpenAI")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Error committing audio buffer: {e}")
-            return False
-
-    def set_audio_callback(self, callback: Callable[[bytes], Any]) -> None:
-        """
-        Set callback function to be called when audio is received from OpenAI.
-
-        Args:
-            callback: Async function to call with received audio data
-        """
-        self.audio_callback = callback
-        logger.debug("Audio callback registered")
-
     def set_transcript_callback(self, callback: Callable[[str], Any]) -> None:
         """
         Set callback function to be called when a complete user input transcript is received from OpenAI.
@@ -176,13 +140,13 @@ class OpenAIRealtimeService:
         self.text_response_callback = callback
         logger.debug("Text response callback registered")
 
-    async def _listen_for_audio(self) -> None:
+    async def _listen_from_llm(self) -> None:
         """
-        Internal method to continuously listen for response from openai
+        Internal method to continuously listen for responses from OpenAI LLM.
         This runs in a background task.
         """
         try:
-            logger.info("Started listening for audio from OpenAI")
+            logger.info("Started listening for responses from OpenAI LLM")
 
             while self.is_connected and self.websocket:
                 try:
@@ -257,16 +221,16 @@ class OpenAIRealtimeService:
                     continue
 
         except asyncio.CancelledError:
-            logger.debug("Audio listening task cancelled")
+            logger.debug("LLM listening task cancelled")
             raise
         except Exception as e:
-            logger.error(f"Error in audio listening loop: {e}")
+            logger.error(f"Error in LLM listening loop: {e}")
 
     def start_listening(self) -> None:
-        """Start background task to listen for audio from OpenAI."""
+        """Start background task to listen for responses from OpenAI LLM."""
         if not self._listen_task or self._listen_task.done():
-            self._listen_task = asyncio.create_task(self._listen_for_audio())
-            logger.info("Started audio listening task")
+            self._listen_task = asyncio.create_task(self._listen_from_llm())
+            logger.info("Started LLM listening task")
 
     async def start_conversation(
         self,
@@ -362,18 +326,38 @@ class OpenAIRealtimeService:
         }
 
 
-# Singleton instance
-_openai_service: Optional[OpenAIRealtimeService] = None
+# Session-based service instances for multi-user support
+_openai_services: dict[str, OpenAIRealtimeService] = {}
 
 
-def get_openai_service() -> OpenAIRealtimeService:
+def get_openai_service(session_id: str) -> OpenAIRealtimeService:
     """
-    Get or create the OpenAI Realtime service singleton.
+    Get or create an OpenAI Realtime service instance for a specific session.
+    Each session gets its own service instance to support multiple concurrent users.
+
+    Args:
+        session_id: The unique session identifier
 
     Returns:
-        OpenAIRealtimeService: The service instance
+        OpenAIRealtimeService: The service instance for this session
     """
-    global _openai_service
-    if _openai_service is None:
-        _openai_service = OpenAIRealtimeService()
-    return _openai_service
+    if session_id not in _openai_services:
+        logger.info(f"Creating new OpenAI service for session: {session_id}")
+        _openai_services[session_id] = OpenAIRealtimeService()
+    return _openai_services[session_id]
+
+
+async def cleanup_openai_service(session_id: str) -> None:
+    """
+    Clean up and remove the OpenAI service instance for a session.
+    Should be called when a session ends.
+
+    Args:
+        session_id: The session identifier to clean up
+    """
+    if session_id in _openai_services:
+        logger.info(f"Cleaning up OpenAI service for session: {session_id}")
+        service = _openai_services[session_id]
+        await service.disconnect()
+        del _openai_services[session_id]
+        logger.info(f"Removed OpenAI service for session: {session_id}. Active sessions: {len(_openai_services)}")

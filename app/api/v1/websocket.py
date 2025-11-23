@@ -2,8 +2,8 @@ import json
 import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.logging import get_logger
-from app.services.openai_service import get_openai_service
-from app.services.Messages import MessageService
+from app.services.openai_service import get_openai_service, cleanup_openai_service
+from app.services.message_service import MessageService
 from app.db.session import get_db
 
 logger = get_logger(__name__)
@@ -33,8 +33,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     logger.info(f"WebSocket connection established for session: {session_id}")
 
-    # Get OpenAI service
-    openai_service = get_openai_service()
+    # Get OpenAI service for this session (each session gets its own instance)
+    openai_service = get_openai_service(session_id)
 
     # Connect to OpenAI Realtime API
     connected = await openai_service.connect()
@@ -72,24 +72,24 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     try:
         if session_id.lower() in ["new", "undefined", "null", ""]:
             # Auto-generate a new UUID for new sessions
-            thread_uuid = uuid.uuid4()
-            logger.info(f"Auto-generated new session UUID: {thread_uuid}")
+            session_uuid = uuid.uuid4()
+            logger.info(f"Auto-generated new session UUID: {session_uuid}")
             # Send the new session ID to the frontend
             await websocket.send_json({
                 "type": "session_created",
-                "session_id": str(thread_uuid)
+                "session_id": str(session_uuid)
             })
         else:
-            thread_uuid = uuid.UUID(session_id)
-            logger.info(f"Using existing session UUID: {thread_uuid}")
+            session_uuid = uuid.UUID(session_id)
+            logger.info(f"Using existing session UUID: {session_uuid}")
     except (ValueError, AttributeError) as e:
         logger.warning(f"Invalid session_id format: {session_id} - {e}. Creating new session.")
         # Fall back to creating a new UUID
-        thread_uuid = uuid.uuid4()
-        logger.info(f"Auto-generated new session UUID after error: {thread_uuid}")
+        session_uuid = uuid.uuid4()
+        logger.info(f"Auto-generated new session UUID after error: {session_uuid}")
         await websocket.send_json({
             "type": "session_created",
-            "session_id": str(thread_uuid)
+            "session_id": str(session_uuid)
         })
 
     # Callback to send OpenAI LLM text responses to frontend AND save to database
@@ -105,7 +105,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             try:
                 await MessageService.create_message(
                     db=db,
-                    thread_id=thread_uuid,
+                    session_id=session_uuid,
                     role="assistant",
                     content=text_response
                 )
@@ -131,7 +131,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             try:
                 await MessageService.create_message(
                     db=db,
-                    thread_id=thread_uuid,
+                    session_id=session_uuid,
                     role="user",
                     content=transcript
                 )
@@ -197,12 +197,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session: {session_id}")
-        await openai_service.disconnect()
+        await cleanup_openai_service(session_id)
         await db.close()
 
     except Exception as e:
         logger.error(f"Error in WebSocket connection for session {session_id}: {e}")
-        await openai_service.disconnect()
+        await cleanup_openai_service(session_id)
         await db.close()
         # Only close if not already disconnected
         try:

@@ -16,7 +16,8 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    thread_id = Column(UUID(as_uuid=True), ForeignKey("sessions.id"), nullable=False)
+    # Note: Database column is "thread_id" for backwards compatibility, but we use session_id in code
+    session_id = Column("thread_id", UUID(as_uuid=True), ForeignKey("sessions.id"), nullable=False)
     role = Column(String, nullable=False)  # "user" or "assistant"
     _encrypted_content = Column("content", Text, nullable=False)  # Stored encrypted
     encryption_version = Column(String, default="v1", nullable=False)
